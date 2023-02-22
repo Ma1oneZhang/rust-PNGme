@@ -1,37 +1,52 @@
+#![allow(unused_variables)]
 use crc::{Algorithm, Crc, CRC_32_ISO_HDLC};
 
 use super::chunk_type::ChunkType;
+
 use std::{
     fmt::Display,
     process::{self, Termination},
 };
+
 impl TryFrom<&[u8]> for Chunk {
     type Error = &'static str;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() <= 12 {
+        if value.len() < 12 {
             return Err("Illage input");
         }
-        let length: u32 = ((value[0] as u32) << 24)
-            + ((value[1] as u32) << 16)
-            + ((value[2] as u32) << 8)
-            + value[3] as u32;
-        let chunk_type: ChunkType =
-            match ChunkType::try_from([value[4], value[5], value[6], value[7]]) {
-                Ok(chunk_type) => chunk_type,
-                Err(msg) => {
-                    eprintln!("{msg}");
-                    process::exit(1);
-                }
-            };
-        let mut crc: u32 = 0;
-        for i in value.len() - 4..=value.len() - 1 {
-            crc <<= 8;
-            crc += value[i] as u32;
-        }
-        if crc != checksum_32(&CRC_32_ISO_HDLC, &value[4..=value.len() - 5]) {
+
+        // split length and data
+        let (length, value) = value.split_at(4);
+        let length = u32::from_be_bytes(match length.try_into() {
+            Ok(res) => res,
+            Err(_) => return Err("try from slice error"),
+        }) as usize
+            + 8;
+        // 8 means ChunkType and CRC as u32 + u32
+
+        // split data to single trunk
+        let (value, _) = value.split_at(length as usize);
+        // see first 4 u8 as chunk_type
+        let chunk_type: [u8; 4] = (&value[..4]).try_into().unwrap();
+        let chunk_type: ChunkType = match ChunkType::try_from(chunk_type) {
+            Ok(chunk_type) => chunk_type,
+            Err(msg) => {
+                eprintln!("{msg}");
+                return Err(msg);
+            }
+        };
+
+        // split checksum from u8 slice
+        let (value, crc) = value.split_at(value.len() - 4);
+        let crc: u32 = u32::from_be_bytes(crc.try_into().unwrap());
+        // check the checksum is current
+        if crc != checksum_32(&CRC_32_ISO_HDLC, value.as_ref()) {
             return Err("Illega checksum");
         }
-        let data = Box::new(value[8..value.len() - 4].to_vec());
+        let length = length - 8;
+        // transfer to heap data
+        let data = Box::new(value[4..].to_vec());
+
         Ok(Chunk {
             length,
             chunk_type,
@@ -51,8 +66,9 @@ impl Termination for Chunk {
         0.into()
     }
 }
+#[derive(Debug)]
 pub struct Chunk {
-    length: u32,
+    length: usize,
     chunk_type: ChunkType,
     data: Box<Vec<u8>>,
     crc: u32,
@@ -68,17 +84,16 @@ impl Chunk {
         let mut chunk_type_byte = chunk_type.bytes().to_vec();
         chunk_type_byte.append(&mut cloned_data);
         let crc = checksum_32(&CRC_32_ISO_HDLC, &chunk_type_byte.as_slice());
-        assert!(crc == 2882656334);
-        let mut data = Box::new(data);
-        let length = data.as_slice().len() as u32;
+        let data = Box::new(data);
+        let length = data.len();
         Chunk {
             length,
             chunk_type,
-            data: data,
-            crc: crc,
+            data,
+            crc,
         }
     }
-    pub fn length(&self) -> u32 {
+    pub fn length(&self) -> usize {
         self.length
     }
     pub fn chunk_type(&self) -> &ChunkType {
@@ -97,6 +112,11 @@ impl Chunk {
         }
     }
     pub fn as_bytes(&self) -> Vec<u8> {
-        *self.data.clone()
+        let mut bytes = Vec::new();
+        bytes.append(&mut (self.length.clone() as u32).to_be_bytes().to_vec());
+        bytes.append(&mut self.chunk_type.bytes().to_vec().clone());
+        bytes.append(&mut self.data().to_vec().clone());
+        bytes.append(&mut self.crc.clone().to_be_bytes().to_vec());
+        bytes
     }
 }

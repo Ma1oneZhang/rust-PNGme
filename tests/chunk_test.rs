@@ -1,3 +1,4 @@
+#![allow(unused_variables)]
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

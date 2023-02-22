@@ -3,30 +3,30 @@ use std::{fmt::Display, str::FromStr};
 #[derive(Debug)]
 pub struct ChunkType {
     bytes: [u8; 4],
-    vaild: bool,
+    valid: bool,
 }
 impl Display for ChunkType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "({}, {}, {}, {}, {})",
-            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3], self.vaild
+            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3], self.valid
         )
     }
 }
 impl PartialEq for ChunkType {
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes && self.valid == other.valid
     }
 
-    fn eq(&self, other: &Self) -> bool {
-        self.bytes == other.bytes && self.vaild == other.vaild
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
     }
 }
 impl TryFrom<[u8; 4]> for ChunkType {
     type Error = &'static str;
     fn try_from(bytes: [u8; 4]) -> Result<Self, Self::Error> {
-        let vaild = true;
+        let valid = true;
         for i in bytes {
             match i {
                 65..=90 => continue,
@@ -34,14 +34,14 @@ impl TryFrom<[u8; 4]> for ChunkType {
                 _ => return Err("Illage input"),
             }
         }
-        Ok(ChunkType { bytes, vaild })
+        Ok(ChunkType { bytes, valid })
     }
 }
 impl FromStr for ChunkType {
     type Err = &'static str;
 
     fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vaild = true;
+        let valid = true;
         if str.len() != 4 {
             return Err("Illega input".into());
         }
@@ -54,7 +54,7 @@ impl FromStr for ChunkType {
                 _ => return Err("Illage input"),
             }
         }
-        Ok(ChunkType { bytes, vaild })
+        Ok(ChunkType { bytes, valid })
     }
 }
 impl ChunkType {
